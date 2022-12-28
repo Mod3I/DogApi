@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json.Linq;
+﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -36,21 +37,63 @@ namespace DogApiApp
 
             ListImages.Items.Clear();
 
-            dynamic jobj = JObject.Parse(HttpClientClass.httpResponse(@"https://dog.ceo/api/breeds/list/all").Result);
-            JObject list = jobj["message"];
+            dynamic jobj;
+            JObject list = null;
 
-            foreach (var a in list.Properties())
+            if (RedisCacheClass.cacheDataBase.StringGet("allBreedsNames") == string.Empty)
             {
-                string breedString = a.Name.ToString().Substring(0, 1).ToUpper() + a.Name.ToString().Substring(1, a.Name.Length - 1);
-                string url = "https://dog.ceo/api/breed/" + breedString.ToLower() + "/images";
-                dynamic jobj1 = JObject.Parse(HttpClientClass.httpResponse(url).Result);
-                JArray list1 = jobj1["message"];
-                foreach (var b in list1)
+                jobj = JObject.Parse(HttpClientClass.httpResponse(@"https://dog.ceo/api/breeds/list/all").Result);
+                list = jobj["message"];
+
+                RedisCacheClass.cacheDataBase.StringSet("allBreedsNames", list.ToString());
+            }
+            else
+            {
+                list = JObject.Parse(RedisCacheClass.cacheDataBase.StringGet("allBreedsNames"));
+            }
+
+            if (RedisCacheClass.cacheDataBase.StringGet("allBreedsPreviewImages") == string.Empty)
+            {
+                List<byte[]> allImages = new List<byte[]>();
+
+                foreach (var a in list.Properties())
                 {
-                    var webClient = new WebClient();
-                    byte[] imageBytes = webClient.DownloadData(b.ToString());
-                    ListImages.Items.Add(new Breeds { Breed = breedString, BreedImg = imageBytes });
-                    break;
+                    string breedString = a.Name.ToString().Substring(0, 1).ToUpper() + a.Name.ToString().Substring(1, a.Name.Length - 1);
+                    string url = "https://dog.ceo/api/breed/" + breedString.ToLower() + "/images";
+                    dynamic jobj1 = JObject.Parse(HttpClientClass.httpResponse(url).Result);
+                    JArray list1 = jobj1["message"];
+                    foreach (var b in list1)
+                    {
+                        var webClient = new WebClient();
+                        byte[] imageBytes = webClient.DownloadData(b.ToString());
+                        allImages.Add(imageBytes);
+                        ListImages.Items.Add(new Breeds { Breed = breedString, BreedImg = imageBytes });
+                        break;
+                    }
+                }
+
+                string serializedImages = JsonConvert.SerializeObject(allImages);
+
+                RedisCacheClass.cacheDataBase.StringSet("allBreedsPreviewImages", serializedImages);
+            }
+            else
+            {
+                string serializedImages = RedisCacheClass.cacheDataBase.StringGet("allBreedsPreviewImages");
+                List<byte[]> allImages = JsonConvert.DeserializeObject<List<byte[]>>(serializedImages);
+                int i = 0;
+                foreach (var a in list.Properties())
+                {
+                    string breedString = a.Name.ToString().Substring(0, 1).ToUpper() + a.Name.ToString().Substring(1, a.Name.Length - 1);
+                    //foreach (var b in allImages)
+                    //{
+                    //    ListImages.Items.Add(new Breeds { Breed = breedString, BreedImg = b });
+                    //    break;
+                    //}
+                    if (i < allImages.Count && i < list.Count)
+                    {
+                        ListImages.Items.Add(new Breeds { Breed = breedString, BreedImg = allImages[i] });
+                        i++;
+                    }
                 }
             }
 

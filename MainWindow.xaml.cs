@@ -22,6 +22,7 @@ using System.Drawing;
 using System.Windows.Interop;
 using System.IO;
 using System.Threading;
+using StackExchange.Redis;
 
 namespace DogApiApp
 {
@@ -33,6 +34,9 @@ namespace DogApiApp
         public MainWindow()
         {
             InitializeComponent();
+
+            RedisCacheClass.Initialize(RedisCacheClass.cacheDataBase);
+
             Manager.MainFrame = MainFrame;
             Manager.MainFrame.Navigate(new MenuPage());
         }
